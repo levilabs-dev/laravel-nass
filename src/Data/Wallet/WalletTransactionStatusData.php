@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace LeviLabs\LaravelNass\Data\Wallet;
 
 use LeviLabs\LaravelNass\Enums\WalletPaymentStatus;
+use LeviLabs\LaravelNass\Support\WalletStatusMapper;
 
 final readonly class WalletTransactionStatusData
 {
@@ -15,18 +16,31 @@ final readonly class WalletTransactionStatusData
         public ?string $amount = null,
         public ?string $message = null,
         public ?int $responseCode = null,
+        public ?string $transactionStatus = null,
     ) {}
 
     /**
-     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $raw  Full JSON body from checkTransaction
      */
-    public static function fromWalletResponse(string $transactionId, array $data, ?int $responseCode = null): self
+    public static function fromCheckTransactionResponse(string $transactionId, array $raw): self
     {
-        $status = WalletPaymentStatus::Pending;
+        $responseCode = $raw['responseCode'] ?? null;
+        $code = is_int($responseCode) ? $responseCode : (is_numeric($responseCode) ? (int) $responseCode : null);
 
-        if ($responseCode === 0) {
-            $status = WalletPaymentStatus::Completed;
-        } elseif ($responseCode !== null) {
+        $data = is_array($raw['data'] ?? null) ? $raw['data'] : [];
+
+        $statusText = isset($data['transactionStatus']) ? (string) $data['transactionStatus'] : null;
+        if ($statusText === null || $statusText === '') {
+            $history = is_array($data['TransactionHistoryList'] ?? null) ? $data['TransactionHistoryList'] : [];
+            $first = is_array($history[0] ?? null) ? $history[0] : [];
+            $statusText = isset($first['TransactionStatus']) ? (string) $first['TransactionStatus'] : null;
+            if (! isset($data['amount']) && isset($first['Amount'])) {
+                $data['amount'] = $first['Amount'];
+            }
+        }
+
+        $status = WalletStatusMapper::toPaymentStatus($statusText);
+        if ($status === WalletPaymentStatus::Pending && $code !== null && $code !== 0) {
             $status = WalletPaymentStatus::Failed;
         }
 
@@ -35,8 +49,9 @@ final readonly class WalletTransactionStatusData
             status: $status,
             orderId: isset($data['orderId']) ? (string) $data['orderId'] : null,
             amount: isset($data['amount']) ? (string) $data['amount'] : null,
-            message: isset($data['message']) ? (string) $data['message'] : null,
-            responseCode: $responseCode,
+            message: is_string($raw['message'] ?? null) ? $raw['message'] : null,
+            responseCode: $code,
+            transactionStatus: $statusText,
         );
     }
 }

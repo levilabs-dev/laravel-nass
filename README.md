@@ -1,8 +1,16 @@
 # levilabs/laravel-nass
 
+<p>
+<a href="https://packagist.org/packages/levilabs/laravel-nass"><img src="https://img.shields.io/packagist/v/levilabs/laravel-nass.svg?style=flat-square&label=Packagist&color=orange" alt="Latest Version on Packagist"></a>
+<a href="https://github.com/levilabs-dev/laravel-nass/actions"><img src="https://img.shields.io/github/actions/workflow/status/levilabs-dev/laravel-nass/run-tests.yml?branch=main&label=Tests&style=flat-square" alt="Tests"></a>
+<a href="https://packagist.org/packages/levilabs/laravel-nass"><img src="https://img.shields.io/packagist/php-v/levilabs/laravel-nass.svg?style=flat-square&label=PHP&color=777bb4" alt="PHP Version"></a>
+<a href="https://laravel.com"><img src="https://img.shields.io/badge/Laravel-11%20%7C%2012%20%7C%2013-ff2d20?style=flat-square" alt="Laravel Version"></a>
+<a href="LICENSE.md"><img src="https://img.shields.io/packagist/l/levilabs/laravel-nass.svg?style=flat-square&color=success" alt="License"></a>
+</p>
+
 Modern Laravel SDK for **[NASS E-Payment Gateway](https://nass.iq/)** (hosted card checkout) and **[Nass Wallet](https://nw.iq/)** merchant checkout — portal payments, status polling, server notify callbacks, wallet init/check, typed DTOs, and optional persistence.
 
-Maintained by **[Levi Labs](https://levilabs.dev)**.
+Maintained by **[Levi Labs](https://levilabs.dev)** ([GitHub](https://github.com/levilabs-dev)).
 
 ## Requirements
 
@@ -108,6 +116,14 @@ return redirect($created->checkoutUrl);
 $status = NassWalletPayment::status('TX-ID-FROM-INIT');
 ```
 
+Wallet callbacks should be **verified with `checkTransaction`**, not by trusting the POST body alone:
+
+```php
+$status = NassWalletPayment::parseCallback($request);
+```
+
+Set `NASS_WALLET_PORTAL_PARAM=id` if your hosted checkout expects `id=` instead of `transactionId=` (official [sample-code-PHP](https://github.com/Nasswallet/sample-code-PHP) uses `transactionId`).
+
 ```bash
 php artisan nass:sync-wallet-statuses
 ```
@@ -139,8 +155,18 @@ Public OpenAPI is not published on [nass.iq/resources/developers](https://nass.i
 | `NassWalletAuth::login()` | POST | `/login` (Basic `Authorization` + JSON `data`) |
 | `NassWalletPayment::init()` | POST | `/initTransaction` |
 | `NassWalletPayment::status()` | POST | `/checkTransaction` |
+| `NassWalletPayment::parseCallback()` | — | Reads `data.InitTransactionId`, then calls `checkTransaction` |
 
-References: [Nasswallet/sample-code-PHP](https://github.com/Nasswallet/sample-code-PHP), [Rstacode/nass](https://github.com/Rstacode/nass), [YadaCoder/nasspay](https://github.com/YadaCoder/nasspay).
+| Environment | Transaction API base (trailing slash optional) |
+| ----------- | --------------------------------------------- |
+| UAT | `https://uatgw1.nasswallet.com/payment/transaction` (also seen: `https://uatgw.nasswallet.com/payment/transaction`) |
+| Production | `https://gw-api.nasswallet.com/phase3/payment/transaction` |
+
+**Official Nass Wallet sample repos:** [Nasswallet](https://github.com/Nasswallet) · [sample-code-PHP](https://github.com/Nasswallet/sample-code-PHP) · [sample-code-Laravel](https://github.com/Nasswallet/sample-code-Laravel) · [sample-code-nodejs](https://github.com/Nasswallet/sample-code-nodejs)
+
+**NASS gateway community references:** [Rstacode/nass](https://github.com/Rstacode/nass) · [YadaCoder/nasspay](https://github.com/YadaCoder/nasspay)
+
+GitHub repo metadata (description + topics): [.github/repository-metadata.md](.github/repository-metadata.md).
 
 ## Events
 

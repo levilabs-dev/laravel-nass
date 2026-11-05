@@ -46,6 +46,7 @@ it('checks wallet transaction status', function () {
                 'transactionId' => 'TX-200',
                 'orderId' => 'W-ORD-2',
                 'amount' => '10.00',
+                'transactionStatus' => 'SUCCESS',
             ],
         ]),
     ]);
@@ -53,5 +54,28 @@ it('checks wallet transaction status', function () {
     $status = NassWalletPayment::status('TX-200');
 
     expect($status->transactionId)->toBe('TX-200')
-        ->and($status->orderId)->toBe('W-ORD-2');
+        ->and($status->orderId)->toBe('W-ORD-2')
+        ->and($status->status->value)->toBe('completed');
+});
+
+it('maps wallet checkTransaction transactionStatus to payment status', function () {
+    Http::fake([
+        'uatgw1.nasswallet.com/payment/transaction/login' => Http::response([
+            'responseCode' => 0,
+            'data' => ['access_token' => 'wallet-token'],
+        ]),
+        'uatgw1.nasswallet.com/payment/transaction/checkTransaction' => Http::response([
+            'responseCode' => 0,
+            'data' => [
+                'transactionId' => 'TX-201',
+                'transactionStatus' => 'SUCCESS',
+                'amount' => '15.00',
+            ],
+        ]),
+    ]);
+
+    $status = NassWalletPayment::status('TX-201');
+
+    expect($status->transactionStatus)->toBe('SUCCESS')
+        ->and($status->status->value)->toBe('completed');
 });

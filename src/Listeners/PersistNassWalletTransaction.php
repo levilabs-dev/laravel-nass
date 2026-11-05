@@ -33,7 +33,7 @@ final class PersistNassWalletTransaction
             ['transaction_id' => $status->transactionId],
             array_filter([
                 'merchant' => $event->merchant,
-                'order_id' => $status->orderId,
+                'order_id' => $status->orderId ?? $status->transactionId,
                 'status' => $status->status->value,
                 'amount' => $status->amount,
                 'checked_at' => now(),

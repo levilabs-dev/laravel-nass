@@ -68,6 +68,12 @@ return [
                 'portal_url' => env('NASS_WALLET_PORTAL_URL', 'https://uatcheckout1.nasswallet.com'),
                 'callback_url' => env('NASS_WALLET_CALLBACK_URL'),
                 'language_code' => env('NASS_WALLET_LANGUAGE', 'en'),
+                'grant_type' => env('NASS_WALLET_GRANT_TYPE', 'password'),
+                /*
+                 * Checkout query key for the hosted portal. Official PHP sample uses
+                 * transactionId=… ; some integrations use id=… instead.
+                 */
+                'portal_transaction_param' => env('NASS_WALLET_PORTAL_PARAM', 'transactionId'),
             ],
         ],
 

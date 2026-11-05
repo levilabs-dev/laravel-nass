@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace LeviLabs\LaravelNass\Services\Wallet;
 
+use Illuminate\Http\Request;
 use LeviLabs\LaravelNass\Contracts\NassWalletPaymentServiceContract;
 use LeviLabs\LaravelNass\Data\Wallet\InitWalletTransactionData;
+use LeviLabs\LaravelNass\Data\Wallet\WalletCallbackData;
 use LeviLabs\LaravelNass\Data\Wallet\WalletTransactionCreatedData;
 use LeviLabs\LaravelNass\Data\Wallet\WalletTransactionStatusData;
 use LeviLabs\LaravelNass\Events\Wallet\WalletPaymentCreated;
@@ -27,7 +29,7 @@ final class NassWalletPaymentService implements NassWalletPaymentServiceContract
         $merchant ??= $this->defaultWalletMerchant();
         $config = $this->walletMerchantConfig($merchant);
 
-        $result = $this->walletDispatch(
+        $raw = $this->walletDispatch(
             $merchant,
             'initTransaction',
             'initTransaction',
@@ -38,16 +40,19 @@ final class NassWalletPaymentService implements NassWalletPaymentServiceContract
             ),
         );
 
-        $data = $result['data'];
+        $data = is_array($raw['data'] ?? null) ? $raw['data'] : [];
         if (empty($data['transactionId']) || empty($data['token'])) {
             throw NassWalletException::apiRejected('initTransaction', 'missing transactionId or token');
         }
+
+        $param = $config['portal_transaction_param'] === 'id' ? 'id' : 'transactionId';
 
         $checkoutUrl = WalletCheckoutUrl::build(
             $config['portal_url'],
             (string) $data['transactionId'],
             (string) $data['token'],
             $config['username'],
+            $param,
         );
 
         $created = WalletTransactionCreatedData::fromInitResponse(
@@ -65,21 +70,28 @@ final class NassWalletPaymentService implements NassWalletPaymentServiceContract
     {
         $merchant ??= $this->defaultWalletMerchant();
 
-        $result = $this->walletDispatch(
+        $raw = $this->walletDispatch(
             $merchant,
             'checkTransaction',
             'checkTransaction',
             ['transactionId' => $transactionId],
         );
 
-        $status = WalletTransactionStatusData::fromWalletResponse(
-            $transactionId,
-            $result['data'],
-            $result['responseCode'],
-        );
+        $status = WalletTransactionStatusData::fromCheckTransactionResponse($transactionId, $raw);
 
         WalletPaymentStatusChecked::dispatch($status, $merchant);
 
         return $status;
+    }
+
+    public function parseCallback(Request $request, ?string $merchant = null): WalletTransactionStatusData
+    {
+        $callback = WalletCallbackData::fromRequest($request);
+
+        if (! $callback->isValid()) {
+            throw NassWalletException::requestFailed('wallet callback', null, 'missing InitTransactionId');
+        }
+
+        return $this->status($callback->initTransactionId, $merchant);
     }
 }

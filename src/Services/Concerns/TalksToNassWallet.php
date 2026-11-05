@@ -21,7 +21,9 @@ trait TalksToNassWallet
      *     base_url: string,
      *     portal_url: string,
      *     callback_url: ?string,
-     *     language_code: string
+     *     language_code: string,
+     *     grant_type: string,
+     *     portal_transaction_param: string
      * }
      */
     private function walletMerchantConfig(string $merchant): array
@@ -51,7 +53,20 @@ trait TalksToNassWallet
             'portal_url' => rtrim((string) ($config['portal_url'] ?? 'https://uatcheckout1.nasswallet.com'), '/'),
             'callback_url' => isset($config['callback_url']) && $config['callback_url'] !== '' ? (string) $config['callback_url'] : null,
             'language_code' => (string) ($config['language_code'] ?? 'en'),
+            'grant_type' => (string) ($config['grant_type'] ?? 'password'),
+            'portal_transaction_param' => (string) ($config['portal_transaction_param'] ?? 'transactionId'),
         ];
+    }
+
+    private function walletBasicAuthorizationHeader(string $basicToken): string
+    {
+        $trimmed = trim($basicToken);
+
+        if (str_starts_with(strtolower($trimmed), 'basic ')) {
+            return $trimmed;
+        }
+
+        return 'Basic '.$trimmed;
     }
 
     private function defaultWalletMerchant(): string
@@ -74,7 +89,7 @@ trait TalksToNassWallet
 
         if ($login) {
             $request = $request->withHeaders([
-                'Authorization' => 'Basic '.$config['basic_token'],
+                'Authorization' => $this->walletBasicAuthorizationHeader($config['basic_token']),
             ]);
         } elseif ($bearerToken !== null && $bearerToken !== '') {
             $request = $request->withToken($bearerToken);
@@ -102,9 +117,14 @@ trait TalksToNassWallet
             throw NassWalletException::missingAccessToken();
         }
 
-        Cache::put($key, $token, (int) config('nass.wallet.token_cache_ttl_seconds', 3300));
+        Cache::put($key, $token, $this->walletTokenTtlSeconds($merchant));
 
         return $token;
+    }
+
+    private function walletTokenTtlSeconds(string $merchant): int
+    {
+        return (int) config('nass.wallet.token_cache_ttl_seconds', 3300);
     }
 
     public function forgetWalletToken(?string $merchant = null): void
@@ -120,7 +140,7 @@ trait TalksToNassWallet
             'data' => [
                 'username' => $config['username'],
                 'password' => $config['password'],
-                'grantType' => 'password',
+                'grantType' => $config['grant_type'],
             ],
         ]);
 
@@ -148,15 +168,35 @@ trait TalksToNassWallet
 
     /**
      * @param  array<string, mixed>  $dataPayload
-     * @return array{responseCode: int|null, data: array<string, mixed>, message: ?string}
+     * @return array<string, mixed>
      */
     private function walletDispatch(string $merchant, string $action, string $uri, array $dataPayload): array
     {
+        return $this->walletDispatchWithToken($merchant, $action, $uri, $dataPayload, retryOnUnauthorized: true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $dataPayload
+     * @return array<string, mixed>
+     */
+    private function walletDispatchWithToken(
+        string $merchant,
+        string $action,
+        string $uri,
+        array $dataPayload,
+        bool $retryOnUnauthorized,
+    ): array {
         $token = $this->rememberWalletToken($merchant, fn (): string => $this->walletLoginForToken($merchant));
 
         $response = $this->walletClient($merchant, $token)->post(ltrim($uri, '/'), [
             'data' => $dataPayload,
         ]);
+
+        if ($retryOnUnauthorized && $response->status() === 401) {
+            $this->forgetWalletToken($merchant);
+
+            return $this->walletDispatchWithToken($merchant, $action, $uri, $dataPayload, retryOnUnauthorized: false);
+        }
 
         if ($response->failed()) {
             throw NassWalletException::requestFailed(
@@ -168,7 +208,7 @@ trait TalksToNassWallet
 
         $json = $response->json();
         if (! is_array($json)) {
-            return ['responseCode' => null, 'data' => [], 'message' => null];
+            return [];
         }
 
         $responseCode = $json['responseCode'] ?? null;
@@ -181,15 +221,6 @@ trait TalksToNassWallet
             );
         }
 
-        $data = $json['data'] ?? [];
-        if (! is_array($data)) {
-            $data = [];
-        }
-
-        return [
-            'responseCode' => $code,
-            'data' => $data,
-            'message' => is_string($json['message'] ?? null) ? $json['message'] : null,
-        ];
+        return $json;
     }
 }
