@@ -48,29 +48,13 @@ Maintained by **[Levi Labs](https://levilabs.dev)** ([GitHub](https://github.com
 
 ## Installation
 
-Stable release (after `v1.0.0` is tagged on GitHub / Packagist):
-
 ```bash
 composer require levilabs/laravel-nass
-```
-
-While the first release is pending, use the `main` branch:
-
-```bash
-composer require levilabs/laravel-nass:dev-main
-```
-
-Publish the config file:
-
-```bash
 php artisan vendor:publish --tag=nass-config
-```
-
-Run the migrations — creates `nass_gateway_payments` and `nass_wallet_transactions`; gateway and wallet lifecycle events upsert rows automatically when listeners are registered (default):
-
-```bash
 php artisan migrate
 ```
+
+Publish step copies [`config/nass.php`](config/nass.php). Migrations create `nass_gateway_payments` and `nass_wallet_transactions`; gateway and wallet lifecycle events upsert rows automatically when listeners are registered (default).
 
 ## Configuration
 
